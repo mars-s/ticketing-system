@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import {
   buttonDanger,
@@ -132,6 +133,9 @@ export function TicketGroupsManager({ initialGroups, authentikGroupNames }: Tick
               </p>
             </div>
             <div className="flex shrink-0 gap-2">
+              <Link href={`/groups/${group.id}/fields`} className={buttonGhost}>
+                Edit fields
+              </Link>
               <button type="button" className={buttonGhost} onClick={() => editGroup(group)}>
                 Edit
               </button>
