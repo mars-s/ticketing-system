@@ -203,6 +203,11 @@ model Ticket {
   /// Prisma can't model tsvector directly, so this field is unreadable/unwritable via the
   /// client; all access to it goes through prisma.$queryRaw in listTicketsForAdminQueue.
   searchVector      Unsupported("tsvector")?
+  /// Answers to the routed group's custom fields at creation time, keyed by field id.
+  /// Only fields that were actually visible (per the group's visibility rules) at submit
+  /// time are stored -- see createTicket() in server/tickets.ts. Null if the group has no
+  /// custom fields, the ticket wasn't routed to a group, or the group uses the default form.
+  customFieldValues Json?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
@@ -237,6 +242,11 @@ model TicketGroup {
   /// Daily unassigned-backlog count for this group. Multiple groups may share the same
   /// channel id -- see queueUnassignedBacklogAlert, which aggregates by channel, not group.
   unassignedBacklogChannelId  String?
+  /// Null = default create-ticket form (all standard fields shown, no custom fields).
+  /// Validated shape: GroupFormConfig (packages/shared/src/fieldConfig.ts). Editable by
+  /// group members (form config only) or admins (this plus everything else on the group)
+  /// -- see isTicketGroupMember/updateTicketGroupFormConfig in server/ticketGroups.ts.
+  formConfig                  Json?
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 
