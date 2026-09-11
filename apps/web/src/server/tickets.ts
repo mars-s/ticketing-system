@@ -5,9 +5,12 @@ import {
   TICKET_PRIORITIES,
   TICKET_STATUSES,
   TICKET_TYPES,
+  evaluateVisibility,
   type CreateInternalTicketInput,
   type CreateMessageInput,
   type CreateTicketInput,
+  type CustomFieldDef,
+  type GroupFormConfig,
   type SearchToken,
   type TicketPriority,
   type TicketStatus,
@@ -383,6 +386,105 @@ export async function redeemTicketShareLink(token: string, ticketId: string, use
   return { ticketId };
 }
 
+const DEFAULT_TICKET_PRIORITY: TicketPriority = 'normal';
+const DEFAULT_TICKET_TYPE: TicketType = 'other';
+
+interface ResolvedTicketFormFields {
+  description: string;
+  priority: TicketPriority;
+  type: TicketType;
+  /** Null when the group has no custom fields configured (nothing to persist). */
+  customFieldValues: Record<string, string | boolean> | null;
+}
+
+/**
+ * Reconciles what the requester submitted against the routed group's formConfig
+ * (null when there's no group, or the group uses the default form):
+ * - a standard field the group hides never trusts the client's value -- the group's
+ *   configured default is used instead
+ * - a standard field the group shows is required/optional per that config, not the
+ *   pre-groups defaults
+ * - every custom field's visibility is re-evaluated from the *effective* values (never
+ *   the client's claimed visibility); a field that evaluates hidden has its submitted
+ *   value dropped entirely, never persisted
+ */
+interface ResolvedStandardFields {
+  description: string;
+  priority: TicketPriority;
+  type: TicketType;
+}
+
+/** The description/priority/type portion of resolveTicketFormFields, split out so
+ * createTicketFromDiscord can apply the same hidden-field/default-value/required
+ * reconciliation without the custom-fields half (the Discord bot's /ticket form
+ * doesn't render a group's custom fields -- known gap, see docs/ticket-group-custom-fields-plan.md). */
+function resolveStandardTicketFields(
+  input: Pick<CreateTicketInput, 'description' | 'priority' | 'type'>,
+  formConfig: GroupFormConfig | null,
+): ResolvedStandardFields {
+  const standard = formConfig?.standardFields ?? {};
+
+  function resolveStandard(
+    key: 'description' | 'priority' | 'type',
+    submitted: string | undefined,
+    fallbackDefault: string,
+    requiredByDefault: boolean,
+  ): string {
+    const cfg = standard[key];
+    if (cfg && !cfg.shown) return cfg.defaultValue ?? fallbackDefault;
+
+    if (submitted !== undefined && submitted !== '') return submitted;
+
+    const required = cfg ? cfg.required : requiredByDefault;
+    if (required) throw new AppError(`"${key}" is required`);
+    return fallbackDefault;
+  }
+
+  return {
+    description: resolveStandard('description', input.description, '', true),
+    priority: resolveStandard('priority', input.priority, DEFAULT_TICKET_PRIORITY, false) as TicketPriority,
+    type: resolveStandard('type', input.type, DEFAULT_TICKET_TYPE, false) as TicketType,
+  };
+}
+
+function resolveTicketFormFields(input: CreateTicketInput, formConfig: GroupFormConfig | null): ResolvedTicketFormFields {
+  const { description, priority, type } = resolveStandardTicketFields(input, formConfig);
+
+  if (!formConfig || formConfig.customFields.length === 0) {
+    return { description, priority, type, customFieldValues: null };
+  }
+
+  const submittedCustom = input.customFieldValues ?? {};
+  // What visibility rules evaluate against: effective (post-default) standard values plus
+  // whatever the requester answered, mirroring exactly what they saw on the form.
+  const liveValues: Record<string, string | boolean | undefined> = { priority, type, ...submittedCustom };
+
+  const customFieldValues: Record<string, string | boolean> = {};
+  for (const field of formConfig.customFields as CustomFieldDef[]) {
+    if (!evaluateVisibility(field.visibility, liveValues)) continue;
+
+    const value = submittedCustom[field.id];
+
+    if (field.kind === 'dropdown') {
+      const isValidOption = typeof value === 'string' && field.options.some((o) => o.value === value);
+      customFieldValues[field.id] = isValidOption ? (value as string) : field.defaultValue;
+      continue;
+    }
+
+    if (field.kind === 'checkbox') {
+      customFieldValues[field.id] = value === true;
+      continue;
+    }
+
+    if (field.required && (value === undefined || value === '')) {
+      throw new AppError(`"${field.label}" is required`);
+    }
+    if (typeof value === 'string' && value !== '') customFieldValues[field.id] = value;
+  }
+
+  return { description, priority, type, customFieldValues };
+}
+
 export async function createTicket(
   userId: string,
   actorRole: 'user' | 'admin',
@@ -398,14 +500,17 @@ export async function createTicket(
   }
 
   // groupId null/undefined = "unsure" -- routed to admins only, unchanged from pre-groups behavior.
-  let group: { id: string; members: { id: string }[] } | null = null;
+  let group: { id: string; members: { id: string }[]; formConfig: GroupFormConfig | null } | null = null;
   if (input.groupId) {
-    group = await prisma.ticketGroup.findUnique({
+    const found = await prisma.ticketGroup.findUnique({
       where: { id: input.groupId },
       include: { members: { select: { id: true } } },
     });
-    if (!group) throw new AppError('Group not found');
+    if (!found) throw new AppError('Group not found');
+    group = { ...found, formConfig: found.formConfig as GroupFormConfig | null };
   }
+
+  const { description, priority, type, customFieldValues } = resolveTicketFormFields(input, group?.formConfig ?? null);
 
   const assigneeIds = input.assigneeIds ?? [];
   if (assigneeIds.length > 0) {
@@ -428,11 +533,12 @@ export async function createTicket(
       data: {
         incidentNumber,
         title: input.title,
-        description: input.description,
-        priority: input.priority,
-        type: input.type,
+        description,
+        priority,
+        type,
         createdById: userId,
         groupId: group?.id,
+        customFieldValues: customFieldValues ?? Prisma.JsonNull,
         watchers: ccUserIds.length > 0 ? { connect: ccUserIds.map((id) => ({ id })) } : undefined,
         assignees:
           assigneeIds.length > 0 ? { connect: assigneeIds.map((id) => ({ id })) } : undefined,
@@ -515,10 +621,13 @@ export async function createTicketFromDiscord(input: CreateInternalTicketInput, 
   const { owner, isNewUser } = await resolveDiscordTicketOwner(input.discordUserId, input.discordUsername);
 
   // groupId null/undefined = "unsure" -- routed to admins only, same as createTicket().
+  let groupFormConfig: GroupFormConfig | null = null;
   if (input.groupId) {
     const group = await prisma.ticketGroup.findUnique({ where: { id: input.groupId } });
     if (!group) throw new AppError('Group not found');
+    groupFormConfig = group.formConfig as GroupFormConfig | null;
   }
+  const { description, priority, type } = resolveStandardTicketFields(input, groupFormConfig);
 
   if (input.idempotencyKey) {
     const existing = await prisma.ticket.findUnique({
@@ -546,9 +655,9 @@ export async function createTicketFromDiscord(input: CreateInternalTicketInput, 
       data: {
         incidentNumber,
         title: input.title,
-        description: input.description,
-        priority: input.priority,
-        type: input.type,
+        description,
+        priority,
+        type,
         createdById: owner.id,
         groupId: input.groupId ?? undefined,
         discordChannelId: input.discordChannelId,

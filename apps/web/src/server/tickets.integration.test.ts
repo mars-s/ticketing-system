@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '@ticketing/db';
+import type { GroupFormConfig } from '@ticketing/shared';
 import { resetDatabase, createTestUser } from '@/test/db';
 import {
   addMessage,
@@ -16,6 +17,7 @@ import {
   updateTicket,
   verifyTicketToken,
 } from './tickets';
+import { createTicketGroup, updateTicketGroupFormConfig } from './ticketGroups';
 
 const BASE_URL = 'https://tickets.test';
 
@@ -98,6 +100,128 @@ describe('createTicket + listTicketsForUser', () => {
     });
 
     expect(ticket.assignees.map((a) => a.id)).toEqual([admin.id]);
+  });
+});
+
+describe('createTicket with a group formConfig', () => {
+  async function makeGroupWithConfig(formConfig: GroupFormConfig) {
+    const admin = await createTestUser({ name: 'Admin', email: `admin-${Date.now()}-${Math.random()}@test.local`, role: 'admin' });
+    const group = await createTicketGroup(
+      { name: `Group ${Date.now()}-${Math.random()}`, authentikGroupNames: ['g'], announcementChannelId: null, unassignedBacklogChannelId: null },
+      admin.id,
+    );
+    await updateTicketGroupFormConfig(group.id, formConfig, admin.id);
+    return group;
+  }
+
+  it('applies the configured default when a standard field is hidden, ignoring any client-sent value', async () => {
+    const owner = await createTestUser({ name: 'Owner' });
+    const group = await makeGroupWithConfig({
+      standardFields: { priority: { shown: false, required: false, defaultValue: 'urgent' } },
+      customFields: [],
+    });
+
+    const ticket = await createTicket(owner.id, 'user', {
+      title: 'Hidden priority',
+      description: 'x',
+      priority: 'low', // client can't override a hidden field
+      groupId: group.id,
+    });
+
+    expect(ticket.priority).toBe('urgent');
+  });
+
+  it('rejects a missing required visible custom field', async () => {
+    const owner = await createTestUser({ name: 'Owner' });
+    const group = await makeGroupWithConfig({
+      standardFields: {},
+      customFields: [{ id: 'phone', kind: 'text', label: 'Phone number', required: true }],
+    });
+
+    await expect(
+      createTicket(owner.id, 'user', { title: 'Missing phone', description: 'x', groupId: group.id }),
+    ).rejects.toThrow('"Phone number" is required');
+  });
+
+  it('stores a visible custom field answer and never persists a hidden field even if the client sends one', async () => {
+    const owner = await createTestUser({ name: 'Owner' });
+    const group = await makeGroupWithConfig({
+      standardFields: {},
+      customFields: [
+        { id: 'ticket-a', kind: 'checkbox', label: 'Type a ticket', required: false },
+        {
+          id: 'ticket-a-text',
+          kind: 'text',
+          label: 'Ticket details',
+          required: true,
+          visibility: { kind: 'condition', condition: { fieldId: 'ticket-a', op: 'isTrue' } },
+        },
+      ],
+    });
+
+    // Checkbox unticked -- the dependent text field is hidden, so even though the client
+    // sneaks a value in for it, it must not be persisted (server re-evaluates visibility).
+    const ticket = await createTicket(owner.id, 'user', {
+      title: 'Checkbox off',
+      description: 'x',
+      groupId: group.id,
+      customFieldValues: { 'ticket-a': false, 'ticket-a-text': 'should be dropped' },
+    });
+    expect(ticket.customFieldValues).toEqual({ 'ticket-a': false });
+
+    const ticket2 = await createTicket(owner.id, 'user', {
+      title: 'Checkbox on',
+      description: 'x',
+      groupId: group.id,
+      customFieldValues: { 'ticket-a': true, 'ticket-a-text': 'real details' },
+    });
+    expect(ticket2.customFieldValues).toEqual({ 'ticket-a': true, 'ticket-a-text': 'real details' });
+  });
+
+  it('falls back to a dropdown default value when the submitted value is not one of its options', async () => {
+    const owner = await createTestUser({ name: 'Owner' });
+    const group = await makeGroupWithConfig({
+      standardFields: {},
+      customFields: [
+        {
+          id: 'category',
+          kind: 'dropdown',
+          label: 'Category',
+          required: true,
+          options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }],
+          defaultValue: 'a',
+        },
+      ],
+    });
+
+    const ticket = await createTicket(owner.id, 'user', {
+      title: 'Bogus dropdown value',
+      description: 'x',
+      groupId: group.id,
+      customFieldValues: { category: 'not-a-real-option' },
+    });
+    expect(ticket.customFieldValues).toEqual({ category: 'a' });
+  });
+
+  it('is unaffected when the group has no formConfig (default form, unchanged pre-groups behavior)', async () => {
+    const owner = await createTestUser({ name: 'Owner' });
+    const admin = await createTestUser({ name: 'Admin', email: 'plain-admin@test.local', role: 'admin' });
+    const group = await createTicketGroup(
+      { name: 'Plain group', authentikGroupNames: ['g'], announcementChannelId: null, unassignedBacklogChannelId: null },
+      admin.id,
+    );
+
+    const ticket = await createTicket(owner.id, 'user', {
+      title: 'No config',
+      description: 'x',
+      priority: 'high',
+      type: 'bug',
+      groupId: group.id,
+    });
+
+    expect(ticket.priority).toBe('high');
+    expect(ticket.type).toBe('bug');
+    expect(ticket.customFieldValues).toBeNull();
   });
 });
 
