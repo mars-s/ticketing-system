@@ -1,15 +1,21 @@
 import { z } from 'zod';
 import { CLOSE_REASONS, TICKET_PRIORITIES, TICKET_STATUSES, TICKET_TYPES } from './types';
+import { groupFormConfigSchema } from './fieldConfig';
 
 export const createTicketSchema = z.object({
   title: z.string().min(3).max(200),
-  description: z.string().min(1).max(4000),
-  priority: z.enum(TICKET_PRIORITIES).default('normal'),
-  type: z.enum(TICKET_TYPES).default('other'),
+  /** Optional when the routed group's form hides description (see createTicket() --
+   *  the group's configured default is applied server-side in that case). */
+  description: z.string().min(1).max(4000).optional(),
+  priority: z.enum(TICKET_PRIORITIES).optional(),
+  type: z.enum(TICKET_TYPES).optional(),
   ccUserIds: z.array(z.string().min(1)).optional(),
   assigneeIds: z.array(z.string().min(1)).optional(),
   /** Null/omitted = "unsure" -- routed to admins only, same as pre-groups behavior. */
   groupId: z.string().min(1).nullable().optional(),
+  /** Answers to the routed group's custom fields, keyed by field id. Re-validated and
+   * filtered server-side against the group's visibility rules -- never trusted as-is. */
+  customFieldValues: z.record(z.string(), z.union([z.string(), z.boolean()])).optional(),
 });
 export type CreateTicketInput = z.infer<typeof createTicketSchema>;
 
@@ -71,8 +77,20 @@ export const ticketGroupSchema = z.object({
   authentikGroupNames: z.array(z.string().min(1)).min(1, 'Link at least one Authentik group'),
   announcementChannelId: optionalChannelId,
   unassignedBacklogChannelId: optionalChannelId,
+  /** Admins may also set the create-ticket form config from the main group editor.
+   * Group members set it via the dedicated PATCH .../form-config route instead
+   * (see updateGroupFormConfigSchema below), which can't touch anything else here. */
+  formConfig: groupFormConfigSchema.nullable().optional(),
 });
 export type TicketGroupInput = z.infer<typeof ticketGroupSchema>;
+
+/** Body for PATCH /api/ticket-groups/[id]/form-config -- the only field either a group
+ * member or an admin may change through that route. `formConfig: null` resets the group
+ * to the default create-ticket form ("Default" button). */
+export const updateGroupFormConfigSchema = z.object({
+  formConfig: groupFormConfigSchema.nullable(),
+});
+export type UpdateGroupFormConfigInput = z.infer<typeof updateGroupFormConfigSchema>;
 
 export const createTagSchema = z.object({
   name: z.string().min(1).max(40),

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import type { GroupFormConfig } from '@ticketing/shared';
 import { getCurrentSession } from '@/lib/session';
 import { canManageTicket, canViewTicket, getTicketOr404, isOverdue, verifyTicketToken } from '@/server/tickets';
 import { markTicketNotificationsRead } from '@/server/notifications';
@@ -11,6 +12,7 @@ import { AdminTicketControls } from '@/components/AdminTicketControls';
 import { TicketAttachments } from '@/components/TicketAttachments';
 import { TicketHistoryTimeline } from '@/components/TicketHistoryTimeline';
 import { TicketTitleEditor } from '@/components/TicketTitleEditor';
+import { TicketCustomFields } from '@/components/TicketCustomFields';
 import { CcEditor } from '@/components/CcEditor';
 import { ShareTicketButton } from '@/components/ShareTicketButton';
 import { backLink, badgeDanger, mutedText, page } from '@/lib/styles';
@@ -102,6 +104,11 @@ export default async function TicketPage({ params, searchParams }: PageProps) {
           </span>
         ))}
       </div>
+
+      <TicketCustomFields
+        values={ticket.customFieldValues as Record<string, string | boolean> | null}
+        formConfig={(ticket.group?.formConfig as GroupFormConfig | null) ?? null}
+      />
 
       {!canManage && isOwner && (
         <div className="mb-3">

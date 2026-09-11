@@ -9,17 +9,33 @@ import {
 } from './schemas';
 
 describe('createTicketSchema', () => {
-  it('accepts a valid payload and defaults priority to normal', () => {
+  it('accepts a valid payload', () => {
     const result = createTicketSchema.parse({ title: 'Printer down', description: 'no ink' });
-    expect(result.priority).toBe('normal');
+    expect(result.title).toBe('Printer down');
+  });
+
+  it('leaves priority/type/description undefined when omitted (resolved server-side against the group config)', () => {
+    const result = createTicketSchema.parse({ title: 'valid title' });
+    expect(result.priority).toBeUndefined();
+    expect(result.type).toBeUndefined();
+    expect(result.description).toBeUndefined();
   });
 
   it('rejects a title shorter than 3 characters', () => {
     expect(() => createTicketSchema.parse({ title: 'ab', description: 'x' })).toThrow();
   });
 
-  it('rejects an empty description', () => {
+  it('rejects an empty description when one is provided', () => {
     expect(() => createTicketSchema.parse({ title: 'valid title', description: '' })).toThrow();
+  });
+
+  it('accepts customFieldValues as a mix of strings and booleans', () => {
+    const result = createTicketSchema.parse({
+      title: 'valid title',
+      description: 'x',
+      customFieldValues: { 'ticket-a': true, 'field-b': 'some text' },
+    });
+    expect(result.customFieldValues).toEqual({ 'ticket-a': true, 'field-b': 'some text' });
   });
 });
 

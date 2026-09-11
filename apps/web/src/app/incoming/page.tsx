@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { getCurrentSession } from '@/lib/session';
 import { AppHeader } from '@/components/AppHeader';
 import { groupTicketsByStatus, isOverdue, listTicketsForGroupQueue } from '@/server/tickets';
+import { listTicketGroupsForUser } from '@/server/ticketGroups';
 import {
   badgeDanger,
   mutedText,
@@ -87,7 +88,10 @@ export default async function IncomingTicketsPage() {
   const session = await getCurrentSession();
   if (!session) redirect('/');
 
-  const tickets = await listTicketsForGroupQueue(session.user.id);
+  const [tickets, myGroups] = await Promise.all([
+    listTicketsForGroupQueue(session.user.id),
+    listTicketGroupsForUser(session.user.id),
+  ]);
   const { active, closedOrResolved } = groupTicketsByStatus(tickets);
 
   return (
@@ -97,6 +101,20 @@ export default async function IncomingTicketsPage() {
         <div className={pageHeader}>
           <h1 className={pageTitle}>Incoming Tickets</h1>
         </div>
+
+        {myGroups.length > 0 && (
+          <p className={`mb-6 ${mutedText}`}>
+            Create-ticket fields:{' '}
+            {myGroups.map((group, index) => (
+              <span key={group.id}>
+                {index > 0 && ', '}
+                <Link href={`/groups/${group.id}/fields`} className="text-accent hover:underline">
+                  {group.name}
+                </Link>
+              </span>
+            ))}
+          </p>
+        )}
 
         <div className="flex flex-col gap-8">
           {(['open', 'escalated', 'pending', 'in_progress'] as const).map((status) => (
