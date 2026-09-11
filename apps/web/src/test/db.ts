@@ -9,6 +9,7 @@ export async function resetDatabase(): Promise<void> {
   await prisma.ticketAttachment.deleteMany();
   await prisma.ticketMessage.deleteMany();
   await prisma.ticket.deleteMany();
+  await prisma.ticketGroup.deleteMany();
   await prisma.tag.deleteMany();
   await prisma.discordClaim.deleteMany();
   await prisma.maintenanceEvent.deleteMany();
