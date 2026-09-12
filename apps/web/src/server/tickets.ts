@@ -30,6 +30,7 @@ import {
 } from '@/server/notifications';
 import { publishTicketMessage } from '@/server/ticket-events';
 import { lookupDirectoryUserByDiscordUsername } from '@/lib/directoryService';
+import { enqueueTicketExportJobs } from '@/server/ticketExports';
 
 const TICKET_TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 const DISCORD_CLAIM_TTL_MS = 1000 * 60 * 30; // 30 minutes
@@ -500,7 +501,15 @@ export async function createTicket(
   }
 
   // groupId null/undefined = "unsure" -- routed to admins only, unchanged from pre-groups behavior.
-  let group: { id: string; members: { id: string }[]; formConfig: GroupFormConfig | null } | null = null;
+  let group:
+    | {
+        id: string;
+        name: string;
+        members: { id: string }[];
+        formConfig: GroupFormConfig | null;
+        exportConfig: Prisma.JsonValue | null;
+      }
+    | null = null;
   if (input.groupId) {
     const found = await prisma.ticketGroup.findUnique({
       where: { id: input.groupId },
@@ -555,6 +564,7 @@ export async function createTicket(
   // pure-function unit tests that never call createTicket.
   const { env } = await import('@/lib/env');
   await notifyNewTicketChannel(ticket, env.publicAppUrl);
+  await enqueueTicketExportJobs(ticket, group, env.publicAppUrl);
 
   return ticket;
 }
@@ -994,7 +1004,13 @@ export async function updateTicket(ticketId: string, input: UpdateTicketInput, a
   const ticket = await prisma.ticket.update({
     where: { id: ticketId },
     data,
-    include: { tags: true, assignees: true, createdBy: true, watchers: true, group: { select: { name: true } } },
+    include: {
+      tags: true,
+      assignees: true,
+      createdBy: true,
+      watchers: true,
+      group: { select: { id: true, name: true, exportConfig: true } },
+    },
   });
 
   await writeAuditLog(actorId, 'ticket.update', 'Ticket', ticketId, input as Prisma.InputJsonValue);
@@ -1028,6 +1044,20 @@ export async function updateTicket(ticketId: string, input: UpdateTicketInput, a
     await notifyStatusChanged(ticket, input.status, actorId, env.publicAppUrl);
     await handlePendingTransition(ticket, previous.status, env.publicAppUrl);
     await handleActiveStatusTransition(ticketId, input.status);
+  }
+
+  const exportSnapshotChanged =
+    input.title !== undefined ||
+    input.status !== undefined ||
+    input.priority !== undefined ||
+    input.type !== undefined ||
+    input.groupId !== undefined ||
+    input.assigneeIds !== undefined;
+  if (exportSnapshotChanged) {
+    // Deferred import: keeps env.ts's required-var validation out of the module load path for
+    // pure-function unit tests that never call updateTicket.
+    const { env } = await import('@/lib/env');
+    await enqueueTicketExportJobs(ticket, ticket.group, env.publicAppUrl);
   }
 
   return ticket;

@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '@ticketing/db';
-import type { GroupFormConfig } from '@ticketing/shared';
+import type { GroupExportConfig, GroupFormConfig } from '@ticketing/shared';
 import { resetDatabase, createTestUser } from '@/test/db';
 import {
   createTicketGroup,
   isTicketGroupMember,
   updateTicketGroup,
+  updateTicketGroupExportConfig,
   updateTicketGroupFormConfig,
 } from './ticketGroups';
 
@@ -49,6 +50,21 @@ describe('updateTicketGroupFormConfig', () => {
 
     const reset = await updateTicketGroupFormConfig(group.id, null, member.id);
     expect(reset.formConfig).toBeNull();
+  });
+});
+
+describe('updateTicketGroupExportConfig', () => {
+  const config: GroupExportConfig = { notion: { databaseId: 'db-123' } };
+
+  it('persists a config and turns export off (null) on request', async () => {
+    const member = await createTestUser({ name: 'Member' });
+    const group = await makeGroup(member.id);
+
+    const saved = await updateTicketGroupExportConfig(group.id, config, member.id);
+    expect(saved.exportConfig).toEqual(config);
+
+    const disabled = await updateTicketGroupExportConfig(group.id, null, member.id);
+    expect(disabled.exportConfig).toBeNull();
   });
 });
 
