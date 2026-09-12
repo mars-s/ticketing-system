@@ -44,6 +44,20 @@ function defaultStandardConfig(): StandardFieldConfig {
   return { shown: true, required: true };
 }
 
+/** Pulls the actual Zod validation message out of handleApiError's
+ * `{ error: 'Invalid request', details: ZodError['flatten'] }` body -- superRefine issues
+ * on nested paths (e.g. customFields[0].defaultValue) land in `formErrors`, not
+ * `fieldErrors`, so both need checking. Falls back to the generic `error` string. */
+function errorMessageFromResponse(body: unknown): string | null {
+  if (!body || typeof body !== 'object') return null;
+  const { error, details } = body as { error?: string; details?: { formErrors?: string[]; fieldErrors?: Record<string, string[]> } };
+  const formErrors = details?.formErrors ?? [];
+  const fieldErrors = Object.values(details?.fieldErrors ?? {}).flat();
+  const messages = [...formErrors, ...fieldErrors];
+  if (messages.length > 0) return messages.join('; ');
+  return error ?? null;
+}
+
 interface TicketGroupFieldsEditorProps {
   groupId: string;
   groupName: string;
@@ -123,7 +137,7 @@ export function TicketGroupFieldsEditor({ groupId, groupName, initialFormConfig 
     setIsSaving(false);
     if (!res.ok) {
       const body = await res.json().catch(() => null);
-      setError(body?.error ?? 'Failed to save');
+      setError(errorMessageFromResponse(body) ?? 'Failed to save');
       return;
     }
     setSavedAt(new Date());
@@ -140,7 +154,7 @@ export function TicketGroupFieldsEditor({ groupId, groupName, initialFormConfig 
     setIsSaving(false);
     if (!res.ok) {
       const body = await res.json().catch(() => null);
-      setError(body?.error ?? 'Failed to reset');
+      setError(errorMessageFromResponse(body) ?? 'Failed to reset');
       return;
     }
     setFormConfig(DEFAULT_GROUP_FORM_CONFIG);
