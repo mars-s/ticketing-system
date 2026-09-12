@@ -164,6 +164,18 @@ export function NewTicketForm() {
         required
       />
 
+      <label className={label}>
+        Department
+        <select className={selectStyle} value={groupId} onChange={(e) => handleGroupChange(e.target.value)}>
+          <option value="">Not sure (goes to admins)</option>
+          {groups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
       {showDescription && (
         <textarea
           className={input}
@@ -191,18 +203,6 @@ export function NewTicketForm() {
           )}
         </div>
       )}
-
-      <label className={label}>
-        Send to
-        <select className={selectStyle} value={groupId} onChange={(e) => handleGroupChange(e.target.value)}>
-          <option value="">Not sure (goes to admins)</option>
-          {groups.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
-          ))}
-        </select>
-      </label>
 
       <DynamicTicketFields
         fields={formConfig.customFields}

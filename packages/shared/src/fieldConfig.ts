@@ -2,9 +2,9 @@ import { z } from 'zod';
 
 /**
  * A TicketGroup's customizable create-ticket form. `title` and the group picker
- * ("Send to") are intentionally NOT configurable here -- every group's form always
- * shows and requires them, enforced by their absence from this shape rather than by
- * a runtime check. See docs/ticket-group-custom-fields-plan.md.
+ * ("Department") are intentionally NOT configurable here -- every group's form always
+ * shows and requires them, directly below `title`, enforced by their absence from this
+ * shape rather than by a runtime check. See docs/ticket-group-custom-fields-plan.md.
  */
 export const STANDARD_FIELD_KEYS = ['description', 'priority', 'type', 'cc', 'attachments'] as const;
 export type StandardFieldKey = (typeof STANDARD_FIELD_KEYS)[number];

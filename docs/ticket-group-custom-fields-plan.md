@@ -11,7 +11,7 @@ Goal: let each `TicketGroup` define its own create-ticket form — hide/require 
 standard fields, add custom fields, and show/hide custom fields conditionally
 based on other field values (checkbox, dropdown, etc). Group members edit their
 own group's field config; admins edit any group's. `title` and `groupId`
-("Send to") always stay on the form and always required.
+("Department") always stay on the form, directly below `title`, and always required.
 
 ## 1. Data model
 
@@ -142,7 +142,7 @@ When `groupId` is null (the existing "unsure → admins" path) or the group's `f
 
 - Groups fetch already happens; each group now carries `formConfig`.
 - On `groupId` change, resolve `config = selectedGroup?.formConfig ?? DEFAULT_CONFIG` (`DEFAULT_CONFIG` = all standard fields shown, no custom fields) and reset any previously-entered custom field values.
-- Render order becomes: **Title** (always) → Description (if shown) → Priority/Type row (each if shown) → **Send to** (always) → *Additional details* block (custom fields, only once a group is picked, in config array order, each gated by `evaluateVisibility(field.visibility, liveFormValues)`) → CC (if shown) → Attachments (if shown).
+- Render order becomes: **Title** (always) → **Department** (always) → Description (if shown) → Priority/Type row (each if shown) → *Additional details* block (custom fields, only once a group is picked, in config array order, each gated by `evaluateVisibility(field.visibility, liveFormValues)`) → CC (if shown) → Attachments (if shown).
 - One field-kind renderer per `CustomFieldDef.kind` (`TextField`, `TextareaField`, `CheckboxField`, `DropdownField`), each controlled off a single `customFieldValues` state object keyed by field id, defaults pre-filled for dropdowns.
 - Submit sends `customFieldValues` alongside the existing payload; only currently-visible fields are included (mirrors server-side drop, avoids sending stale hidden answers).
 

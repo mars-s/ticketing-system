@@ -172,7 +172,7 @@ export function TicketGroupFieldsEditor({ groupId, groupName, initialFormConfig 
 
       <section className={`${card} flex flex-col gap-3`}>
         <h3 className="text-sm font-semibold text-text">Standard fields</h3>
-        <p className={mutedText}>Title and &ldquo;Send to&rdquo; always appear and are always required.</p>
+        <p className={mutedText}>Title and &ldquo;Department&rdquo; always appear and are always required, directly below Title.</p>
         {STANDARD_FIELD_KEYS.map((key) => {
           const cfg = standardConfig(key);
           const needsDefault = NEEDS_DEFAULT_WHEN_HIDDEN.includes(key);
