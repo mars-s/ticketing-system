@@ -31,9 +31,14 @@ export default async function GroupFieldsPage({ params }: PageProps) {
       <main className={page}>
         <div className={pageHeader}>
           <h1 className={pageTitle}>{group.name} — Fields</h1>
-          <Link href={isAdmin ? '/admin/ticket-groups' : '/incoming'} className={backLink}>
-            Back
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link href={`/groups/${group.id}/export`} className={backLink}>
+              Export
+            </Link>
+            <Link href={isAdmin ? '/admin/ticket-groups' : '/incoming'} className={backLink}>
+              Back
+            </Link>
+          </div>
         </div>
         <p className={`mb-6 ${mutedText}`}>
           Customize what requesters are asked when they route a ticket to this group. Anyone in the group can
