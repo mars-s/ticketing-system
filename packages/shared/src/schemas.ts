@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CLOSE_REASONS, TICKET_PRIORITIES, TICKET_STATUSES, TICKET_TYPES } from './types';
 import { groupFormConfigSchema } from './fieldConfig';
+import { groupExportConfigSchema, TICKET_EXPORT_TARGETS } from './exportConfig';
 
 export const createTicketSchema = z.object({
   title: z.string().min(3).max(200),
@@ -91,6 +92,20 @@ export const updateGroupFormConfigSchema = z.object({
   formConfig: groupFormConfigSchema.nullable(),
 });
 export type UpdateGroupFormConfigInput = z.infer<typeof updateGroupFormConfigSchema>;
+
+/** Body for PATCH /api/ticket-groups/[id]/export-config -- same member-or-admin gate as
+ * form-config. `exportConfig: null` turns export off for the group. */
+export const updateGroupExportConfigSchema = z.object({
+  exportConfig: groupExportConfigSchema.nullable(),
+});
+export type UpdateGroupExportConfigInput = z.infer<typeof updateGroupExportConfigSchema>;
+
+/** Body for POST /api/ticket-groups/[id]/export-config/test-send. Tests the group's
+ * currently-saved export config (save before testing), not unsaved form state. */
+export const testSendExportSchema = z.object({
+  target: z.enum(TICKET_EXPORT_TARGETS),
+});
+export type TestSendExportInput = z.infer<typeof testSendExportSchema>;
 
 export const createTagSchema = z.object({
   name: z.string().min(1).max(40),

@@ -5,6 +5,7 @@ export async function resetDatabase(): Promise<void> {
   await prisma.auditLog.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.discordDm.deleteMany();
+  await prisma.ticketExportJob.deleteMany();
   await prisma.ticketAccessToken.deleteMany();
   await prisma.ticketAttachment.deleteMany();
   await prisma.ticketMessage.deleteMany();

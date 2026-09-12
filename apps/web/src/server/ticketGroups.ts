@@ -1,5 +1,5 @@
 import { Prisma, prisma } from '@ticketing/db';
-import type { GroupFormConfig, TicketGroupInput } from '@ticketing/shared';
+import type { GroupExportConfig, GroupFormConfig, TicketGroupInput } from '@ticketing/shared';
 import { AppError } from '@/lib/errors';
 import { writeAuditLog } from '@/server/audit';
 
@@ -7,6 +7,12 @@ import { writeAuditLog } from '@/server/audit';
  * (VisibilityRule, CustomFieldDef) don't structurally satisfy Prisma's InputJsonObject
  * index signature -- this cast is the sanctioned boundary between the two. */
 function toJsonInput(config: GroupFormConfig | null | undefined): Prisma.InputJsonValue | typeof Prisma.JsonNull {
+  return config == null ? Prisma.JsonNull : (config as unknown as Prisma.InputJsonValue);
+}
+
+function exportConfigToJsonInput(
+  config: GroupExportConfig | null | undefined,
+): Prisma.InputJsonValue | typeof Prisma.JsonNull {
   return config == null ? Prisma.JsonNull : (config as unknown as Prisma.InputJsonValue);
 }
 
@@ -53,6 +59,24 @@ export async function updateTicketGroupFormConfig(
   });
   await writeAuditLog(actorId, 'ticket_group.form_config_update', 'TicketGroup', groupId, {
     reset: formConfig === null,
+  });
+  return group;
+}
+
+/** Callers must gate this behind requireAdmin() OR isTicketGroupMember() -- same gate as
+ * updateTicketGroupFormConfig. `exportConfig: null` turns ticket export off for the group. */
+export async function updateTicketGroupExportConfig(
+  groupId: string,
+  exportConfig: GroupExportConfig | null,
+  actorId: string,
+) {
+  await getTicketGroupOr404(groupId);
+  const group = await prisma.ticketGroup.update({
+    where: { id: groupId },
+    data: { exportConfig: exportConfigToJsonInput(exportConfig) },
+  });
+  await writeAuditLog(actorId, 'ticket_group.export_config_update', 'TicketGroup', groupId, {
+    disabled: exportConfig === null,
   });
   return group;
 }

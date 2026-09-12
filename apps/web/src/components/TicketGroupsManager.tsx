@@ -136,6 +136,9 @@ export function TicketGroupsManager({ initialGroups, authentikGroupNames }: Tick
               <Link href={`/groups/${group.id}/fields`} className={buttonGhost}>
                 Edit fields
               </Link>
+              <Link href={`/groups/${group.id}/export`} className={buttonGhost}>
+                Export
+              </Link>
               <button type="button" className={buttonGhost} onClick={() => editGroup(group)}>
                 Edit
               </button>

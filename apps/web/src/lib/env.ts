@@ -28,4 +28,12 @@ export const env = {
   s3AccessKeyId: required('S3_ACCESS_KEY_ID'),
   s3SecretAccessKey: required('S3_SECRET_ACCESS_KEY'),
   s3ForcePathStyle: (process.env.S3_FORCE_PATH_STYLE ?? 'true') === 'true',
+  // Shared app-wide export credentials -- optional (unset = that target is unavailable for
+  // every group, PATCH .../export-config rejects enabling it). See
+  // docs/ticket-group-external-export-plan.md section 0 for why these are app-wide rather
+  // than per-group: a group only supplies a database/spreadsheet id and shares it with the
+  // integration/service account named here.
+  notionIntegrationToken: process.env.NOTION_INTEGRATION_TOKEN,
+  /** Raw service account JSON (the file contents), not a path. */
+  googleServiceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
 };
