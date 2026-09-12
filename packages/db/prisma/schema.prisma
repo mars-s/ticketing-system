@@ -221,6 +221,7 @@ model Ticket {
   notifications Notification[]
   discordDms    DiscordDm[]
   history       TicketHistory[]
+  exportJobs    TicketExportJob[]
 
   @@index([status])
   @@index([createdById])
@@ -247,13 +248,49 @@ model TicketGroup {
   /// group members (form config only) or admins (this plus everything else on the group)
   /// -- see isTicketGroupMember/updateTicketGroupFormConfig in server/ticketGroups.ts.
   formConfig                  Json?
+  /// Null = ticket export off for this group. Validated shape: GroupExportConfig
+  /// (packages/shared/src/exportConfig.ts). Same edit gate as formConfig -- group
+  /// members or admins, see isTicketGroupMember/updateTicketGroupExportConfig.
+  exportConfig                 Json?
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 
   members User[]   @relation("TicketGroupMembers")
   tickets Ticket[]
+  exportJobs TicketExportJob[]
 
   @@map("ticket_groups")
+}
+
+enum TicketExportTarget {
+  notion
+  google_sheets
+}
+
+/// Outbox row per (ticket, target) mutation a group wants mirrored to Notion/Sheets. The
+/// web app enqueues rows inline with the ticket create/update transaction; an external cron
+/// polls POST /api/internal/ticket-exports/pending, which delivers directly to the Notion/
+/// Sheets APIs (no bot/gateway needed for either, unlike Discord) -- mirrors the enqueue-
+/// then-deliver shape of DiscordDm/DiscordChannelMessage.
+model TicketExportJob {
+  id       String             @id @default(cuid())
+  ticketId String
+  ticket   Ticket             @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  groupId  String
+  group    TicketGroup        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  target   TicketExportTarget
+  /// Snapshot of the row to write, computed at enqueue time so delivery doesn't need to
+  /// re-read a possibly-since-changed ticket. Shape: TicketExportSnapshot.
+  payload   Json
+  attempts  Int       @default(0)
+  lastError String?
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([sentAt])
+  @@index([target, createdAt])
+  @@index([groupId, target, createdAt])
+  @@map("ticket_export_jobs")
 }
 
 /// Backs Ticket.incidentNumber generation: one row per calendar year, incremented
