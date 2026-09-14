@@ -1,7 +1,15 @@
+import { traced } from './tracing';
 import { logger } from './logger';
-import { syncAuthentikDirectory } from './api-client';
-import { processPendingDiscordDms } from './discord-dms';
-import { processPendingDiscordChannelMessages } from './discord-channel-messages';
+import { syncAuthentikDirectory as syncAuthentikDirectoryRaw } from './api-client';
+import { processPendingDiscordDms as processPendingDiscordDmsRaw } from './discord-dms';
+import { processPendingDiscordChannelMessages as processPendingDiscordChannelMessagesRaw } from './discord-channel-messages';
+
+const syncAuthentikDirectory = traced('authentik.sync', syncAuthentikDirectoryRaw);
+const processPendingDiscordDms = traced('discord.dm_poll', processPendingDiscordDmsRaw);
+const processPendingDiscordChannelMessages = traced(
+  'discord.channel_message_poll',
+  processPendingDiscordChannelMessagesRaw,
+);
 
 const AUTHENTIK_SYNC_INTERVAL_MS = 1000 * 60 * 15;
 const DISCORD_DM_POLL_INTERVAL_MS = 1000 * 30;
