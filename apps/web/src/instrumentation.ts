@@ -1,3 +1,6 @@
+import { registerOTel } from '@vercel/otel';
+import { RedactQueryStringSpanProcessor } from '@/lib/otelRedactingSpanProcessor';
+
 const CLEANUP_INTERVAL_MS = 1000 * 60 * 60 * 24;
 const PENDING_ESCALATION_CHECK_INTERVAL_MS = 1000 * 60 * 60; // hourly
 const SLA_BREACH_CHECK_INTERVAL_MS = 1000 * 60 * 60; // hourly
@@ -14,6 +17,15 @@ const DISCORD_ID_REFRESH_INTERVAL_MS = 1000 * 60 * 60; // hourly, decoupled from
  */
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
+
+  // Redacting processor runs first in the chain so every later processor --
+  // including @vercel/otel's own OTLP-exporting one -- only ever sees
+  // query-string-stripped URLs. See otelRedactingSpanProcessor.ts for why.
+  registerOTel({
+    serviceName: 'ticketing-web',
+    traceExporter: 'auto',
+    spanProcessors: [new RedactQueryStringSpanProcessor(), 'auto'],
+  });
 
   const { cleanupExpiredAttachments } = await import('@/server/attachments');
   const { queuePendingEscalationDms, queueSlaBreachAlerts, queueActiveStatusReminders, queueUnassignedBacklogAlert } =
