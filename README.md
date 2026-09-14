@@ -64,6 +64,10 @@ keeps one write path into the database.
   `/api/internal/*` routes; this app only calls back out to send DMs
 - An S3-compatible bucket for ticket attachments (AWS S3, or self-hosted
   [minio](https://min.io) — the local Docker Compose stack runs minio for you)
+- The [Prometheus Operator CRDs](https://github.com/prometheus-operator/prometheus-operator)
+  installed in the target cluster before the first sync — `deploy/base` includes a
+  `ServiceMonitor` (`web-servicemonitor.yaml`), and ArgoCD will fail to sync an unknown
+  `monitoring.coreos.com/v1` kind without them
 
 ## Configuring Authentik
 
